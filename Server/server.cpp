@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <iostream>
 #include <string>
+#include <vector>
+#include <sstream>
 
 // Connect MySQL
 #include "mysql_connection.h"
@@ -71,11 +73,116 @@ bool authenticateUser(const std::string& client_name, const std::string& client_
     }
     catch (sql::SQLException e)
     {
-        std::cout << "Could recive data from SQL server: " << e.what() << '\n';
+        std::cout << "Authenticatate user failed: " << e.what() << '\n';
         system("pause");
         exit(1);
     }
 }
+
+std::vector<std::string> showRooms(const std::string& client_name, sql::Connection* con)
+{
+    try 
+    {
+        std::vector<std::string> rooms;
+        sql::PreparedStatement* pstmt;
+        sql::ResultSet* res;
+
+        pstmt = con->prepareStatement(
+            "SELECT rooms.name FROM rooms INNER JOIN users ON rooms.user_id = users.user_id WHERE users.username = ?");
+
+        pstmt->setString(1, client_name);
+        res = pstmt->executeQuery();
+
+        while (res->next())
+        {
+            rooms.push_back(res->getString("name"));
+        }
+
+        delete res;
+        delete pstmt;
+
+        return rooms;
+    }
+    
+    catch (sql::SQLException e)
+    {
+        std::cout << "Show rooms failed: " << e.what() << '\n';
+        system("pause");
+        exit(1);
+    }
+}
+
+std::string serializerVector(const std::vector<std::string>& vector)
+{
+    std::ostringstream oss;
+    for (auto elem : vector)
+    {
+        oss << elem << '\n';
+    }
+
+    return oss.str();
+}
+
+int getUserId(const std::string& client_name, sql::Connection* con)
+{
+    try
+    {
+        sql::PreparedStatement* pstmt;
+        sql::ResultSet* res;
+        int result;
+
+        pstmt = con->prepareStatement("SELECT user_id FROM users WHERE username = ?");
+        pstmt->setString(1, client_name);
+
+        res = pstmt->executeQuery();
+        while (res->next())
+        {
+            result = res->getInt(1);
+        }
+        
+
+        delete res;
+        delete pstmt;
+
+        return result;
+    }
+    catch (sql::SQLException e)
+    {
+        std::cout << "Get user_id failed: " << e.what() << '\n';
+        system("pause");
+        exit(1);
+    }
+}
+
+bool createRoom(const std::string& room_name, const std::string& client_name, sql::Connection* con)
+{
+    try
+    {
+        sql::PreparedStatement* pstmt;
+        sql::ResultSet* res;
+
+        pstmt = con->prepareStatement("INSERT INTO rooms(name, user_id) VALUES(?, ?)");
+        pstmt->setString(1, room_name);
+        pstmt->setInt(2, getUserId(client_name, con));
+
+        res = pstmt->executeQuery();
+
+        bool result = res;
+
+        delete res;
+        delete pstmt;
+
+        return result;
+    }
+    catch (sql::SQLException e)
+    {
+        std::cout << "Create room failed: " << e.what() << '\n';
+        system("pause");
+        exit(1);
+    }
+    
+}
+
 
 int __cdecl main(void)
 {
@@ -201,8 +308,8 @@ int __cdecl main(void)
         if (authenticateUser(client_name, client_pass, con))
         {
             std::cout << "Authentication passed\n";
-            const char status{ 1 };
-            iResult = send(ClientSocket, &status, sizeof(status), 0);
+
+            iResult = send(ClientSocket, "1", 1, 0);
             if (iResult == SOCKET_ERROR) {
                 printf("status send failed with error");
                 closesocket(ClientSocket);
@@ -214,8 +321,8 @@ int __cdecl main(void)
         else
         {
             std::cout << "Authentication failed\n";
-            const char status{ 0 };
-            iResult = send(ClientSocket, &status, sizeof(status), 0);
+
+            iResult = send(ClientSocket, "0", 1, 0);
             if (iResult == SOCKET_ERROR) {
                 printf("status send failed with error");
                 closesocket(ClientSocket);
@@ -225,22 +332,55 @@ int __cdecl main(void)
         }
     }
 
-    // Sent rooms information
+    // Show rooms information
 
+    std::vector<std::string> rooms;
 
-    sql::PreparedStatement* pstmt;
-    sql::ResultSet* res;
-    pstmt = con->prepareStatement(
-        "SELECT rooms.name FROM rooms INNER JOIN users ON rooms.user_id = users.user_id WHERE users.username = ?");
-    pstmt->setString(1, client_name);
-    res = pstmt->executeQuery();
+    rooms = showRooms(client_name, con);
 
-    while (res->next())
+    if (!rooms.empty())
     {
-        std::cout << res->getString("name") << '\n';
+        iResult = send(ClientSocket, "1", 1, 0);
+        if (iResult == SOCKET_ERROR) {
+            printf("rooms send failed with error: %d\n", WSAGetLastError());
+            closesocket(ClientSocket);
+            WSACleanup();
+            return 1;
+        }
+
+        iResult = send(ClientSocket, serializerVector(rooms).c_str(), serializerVector(rooms).size(), 0);
+        if (iResult == SOCKET_ERROR) {
+            printf("rooms send failed with error: %d\n", WSAGetLastError());
+            closesocket(ClientSocket);
+            WSACleanup();
+            return 1;
+        }
     }
-    delete res;
-    delete pstmt;
+    else
+    {
+        iResult = send(ClientSocket, "0", 1 , 0);
+        if (iResult == SOCKET_ERROR) {
+            printf("rooms send failed with error: %d\n", WSAGetLastError());
+            closesocket(ClientSocket);
+            WSACleanup();
+            return 1;
+        }
+
+        std::string room_name;
+
+        iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
+        if (iResult > 0)
+        {
+            recvbuf[iResult] = '\0';
+            room_name = recvbuf;
+            std::cout << room_name << '\n';
+        }
+
+        createRoom(room_name, client_name, con);
+        
+    }
+
+    
 
 
     // shutdown the connection since we're done

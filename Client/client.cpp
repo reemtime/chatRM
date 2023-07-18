@@ -128,13 +128,58 @@ int __cdecl main(int argc, char** argv)
             return 1;
         }
 
-        if (status == 1)
+        if (status == '1')
         {
+            system("cls");
             std::cout << "Authentication passed\n";
             break;
         }
 
     }
+
+    // show roooms
+    iResult = recv(ConnectSocket, &status, sizeof(status), 0);
+    if (iResult == SOCKET_ERROR) {
+        printf("status recv failed with error: %d\n", WSAGetLastError());
+        closesocket(ConnectSocket);
+        WSACleanup();
+        return 1;
+    }
+
+
+    if (status == '1')
+    {
+        std::string rooms;
+        iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
+        if (iResult == SOCKET_ERROR) {
+            printf("rooms recv failed with error: %d\n", WSAGetLastError());
+            closesocket(ConnectSocket);
+            WSACleanup();
+            return 1;
+        }
+        recvbuf[iResult-1] = '\0';
+        rooms = recvbuf;
+
+        std::cout << "Your rooms: " << '\n';
+        std::cout << rooms << '\n';
+    }
+    else 
+    {
+        std::cout << "You don't have rooms.\n";
+        std::string name_room;
+        std::cout << "Enter room's name: ";
+        std::getline(std::cin, name_room);
+
+        iResult = send(ConnectSocket, name_room.c_str(), strlen(name_room.c_str()), 0);
+        if (iResult == SOCKET_ERROR) {
+            printf("room's name send failed with error: %d\n", WSAGetLastError());
+            closesocket(ConnectSocket);
+            WSACleanup();
+            return 1;
+        }
+
+    }
+
 
     // shutdown the connection since no more data will be sent
     iResult = shutdown(ConnectSocket, SD_SEND);
@@ -146,21 +191,21 @@ int __cdecl main(int argc, char** argv)
     }
 
     // Receive until the peer closes the connection
-    //do {
+    do {
 
-    //    iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
-    //    if (iResult > 0)
-    //        {
-    //            printf("Bytes received: %d\n", iResult);
-    //            std::cout << recvbuf << '\n';
-    //        }
-    //        
-    //    else if (iResult == 0)
-    //        printf("Connection closed\n");
-    //    else
-    //        printf("recv failed with error: %d\n", WSAGetLastError());
+        iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
+        if (iResult > 0)
+            {
+                printf("Bytes received: %d\n", iResult);
+                std::cout << recvbuf << '\n';
+            }
+            
+        else if (iResult == 0)
+            printf("Connection closed\n");
+        else
+            printf("recv failed with error: %d\n", WSAGetLastError());
 
-    //} while (iResult > 0);
+    } while (iResult > 0);
 
     // cleanup
     closesocket(ConnectSocket);
