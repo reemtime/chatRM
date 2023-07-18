@@ -122,7 +122,7 @@ int __cdecl main(int argc, char** argv)
 
         iResult = recv(ConnectSocket, &status, sizeof(status), 0);
         if (iResult == SOCKET_ERROR) {
-            printf("recv failed with error: %d\n", WSAGetLastError());
+            printf("status recv failed with error: %d\n", WSAGetLastError());
             closesocket(ConnectSocket);
             WSACleanup();
             return 1;

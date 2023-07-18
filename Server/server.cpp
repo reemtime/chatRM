@@ -25,6 +25,58 @@
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27015"
 
+sql::Connection* connectToDatebase(const std::string& dbServer, const std::string& dbUsername, 
+                                   const std::string& dbPassword, const std::string& dbName)
+{
+    sql::Driver* driver;
+    sql::Connection* con;
+
+    try
+    {
+        driver = get_driver_instance();
+        con = driver->connect(dbServer, dbUsername, dbPassword);
+        con->setSchema(dbName);
+        std::cout << "Database is connected.\n";
+        return con;
+    }
+    catch (sql::SQLException e)
+    {
+        std::cout << "Could not connect to server. Error message: " << e.what() << '\n';
+        system("pause");
+        exit(1);
+    }
+}
+
+bool authenticateUser(const std::string& client_name, const std::string& client_pass, sql::Connection* con)
+{
+    try
+    {
+        sql::PreparedStatement* pstmt;
+        sql::ResultSet* res;
+        
+        std::string query = "SELECT * FROM users WHERE username = ? and password = ?";
+
+        pstmt = con->prepareStatement(query);
+
+        pstmt->setString(1, client_name);
+        pstmt->setString(2, client_pass);
+
+        res = pstmt->executeQuery();
+        bool result = res->next();
+        
+        delete pstmt;
+        delete res;  
+
+        return result;    
+    }
+    catch (sql::SQLException e)
+    {
+        std::cout << "Could recive data from SQL server: " << e.what() << '\n';
+        system("pause");
+        exit(1);
+    }
+}
+
 int __cdecl main(void)
 {
     WSADATA wsaData;
@@ -104,33 +156,12 @@ int __cdecl main(void)
 
     // Connect to db
 
-    const std::string dbServer = "tcp://127.0.0.1:3306";
-    const std::string dbUser = DB_USERNAME;
-    const std::string dbPassword = DB_PASSWORD;
+    sql::Connection* con = connectToDatebase(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_NAME);
 
-    sql::Driver* driver;
-    sql::Connection* con;
+    // Authenticate data
 
-
-    
-    try
-    {
-        driver = get_driver_instance();
-        con = driver->connect(dbServer, dbUser, dbPassword);
-    }
-    catch (sql::SQLException e)
-    {
-        std::cout << "Could not connect to server. Error message: " << e.what() << '\n';
-        system("pause");
-        exit(1);
-    }
-
-    
-
-    // Authentication data
-
-    std::string username;
-    std::string password;
+    std::string client_name;
+    std::string client_pass;
 
     while (true)
     {
@@ -138,13 +169,13 @@ int __cdecl main(void)
         iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
             recvbuf[iResult] = '\0';
-            username = recvbuf;
-            std::cout << username << '\n';
+            client_name = recvbuf;
+            std::cout << client_name << '\n';
         }
         else if (iResult == 0)
             printf("Connection closing...\n");
         else {
-            printf("recv failed with error: %d\n", WSAGetLastError());
+            printf("name recv failed with error: %d\n", WSAGetLastError());
             closesocket(ClientSocket);
             WSACleanup();
             return 1;
@@ -153,13 +184,13 @@ int __cdecl main(void)
         iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
             recvbuf[iResult] = '\0';
-            password = recvbuf;
-            std::cout << password << '\n';
+            client_pass = recvbuf;
+            std::cout << client_pass << '\n';
         }
         else if (iResult == 0)
             printf("Connection closing...\n");
         else {
-            printf("recv failed with error: %d\n", WSAGetLastError());
+            printf("pass recv failed with error: %d\n", WSAGetLastError());
             closesocket(ClientSocket);
             WSACleanup();
             return 1;
@@ -167,40 +198,30 @@ int __cdecl main(void)
 
         // Authenticate
 
-        try
+        if (authenticateUser(client_name, client_pass, con))
         {
-            sql::Statement* stmt;
-            sql::ResultSet* res;
-
-            con->setSchema("chat");
-            stmt = con->createStatement();
-
-            std::string query = "SELECT * FROM users WHERE username = '" + std::string(username)
-                + "' AND password = '" + std::string(password) + "'";
-            std::cout << query << '\n';
-            res = stmt->executeQuery(query);
-
-            if (res->next())
-            {
-                std::cout << "Authentication passed\n";
-                const char status{1};
-                send(ClientSocket, &status, sizeof(status), 0);
-                break;
+            std::cout << "Authentication passed\n";
+            const char status{ 1 };
+            iResult = send(ClientSocket, &status, sizeof(status), 0);
+            if (iResult == SOCKET_ERROR) {
+                printf("status send failed with error");
+                closesocket(ClientSocket);
+                WSACleanup();
+                return 1;
             }
-            else
-            {
-                std::cout << "Authentication failed\n";
-                const char status{ 0 };
-                send(ClientSocket, &status, sizeof(status), 0);
-            }
-            delete stmt;
-            delete res;
+            break;
         }
-        catch (sql::SQLException e)
+        else
         {
-            std::cout << "Could recive data from SQL server: " << e.what() << '\n';
-            system("pause");
-            exit(1);
+            std::cout << "Authentication failed\n";
+            const char status{ 0 };
+            iResult = send(ClientSocket, &status, sizeof(status), 0);
+            if (iResult == SOCKET_ERROR) {
+                printf("status send failed with error");
+                closesocket(ClientSocket);
+                WSACleanup();
+                return 1;
+            }
         }
     }
 
@@ -211,7 +232,7 @@ int __cdecl main(void)
     sql::ResultSet* res;
     pstmt = con->prepareStatement(
         "SELECT rooms.name FROM rooms INNER JOIN users ON rooms.user_id = users.user_id WHERE users.username = ?");
-    pstmt->setString(1, username);
+    pstmt->setString(1, client_name);
     res = pstmt->executeQuery();
 
     while (res->next())
