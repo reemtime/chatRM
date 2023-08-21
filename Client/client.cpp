@@ -1,215 +1,196 @@
-#define WIN32_LEAN_AND_MEAN
-
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string>
 #include <iostream>
+#include <boost/asio.hpp>
+#include <boost/array.hpp>
 
-
-// Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
-#pragma comment (lib, "Ws2_32.lib")
-#pragma comment (lib, "Mswsock.lib")
-#pragma comment (lib, "AdvApi32.lib")
-
-
-#define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27015"
-
-
-
-
-int __cdecl main(int argc, char** argv)
+void join_room(boost::asio::ip::tcp::socket& socket, boost::system::error_code& error, std::string& room_name)
 {
-    WSADATA wsaData;
-    SOCKET ConnectSocket = INVALID_SOCKET;
-    struct addrinfo* result = NULL,
-        * ptr = NULL,
-        hints;
-    const char* sendbuf = NULL;
-    char recvbuf[DEFAULT_BUFLEN];
-    int iResult;
-    int recvbuflen = DEFAULT_BUFLEN;
+	boost::array<char, 256> buf;
+	std::string message;
 
-    // Validate the parameters
-    if (argc != 2) {
-        printf("usage: %s server-name\n", argv[0]);
-        return 1;
-    }
+	std::cout << room_name << std::endl;
 
-    // Initialize Winsock
-    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup failed with error: %d\n", iResult);
-        return 1;
-    }
+	boost::asio::write(socket, boost::asio::buffer(room_name), error);
+	size_t r_bytes = socket.read_some(boost::asio::buffer(message), error);
+	std::cout.write(buf.data(), r_bytes);
+}
 
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
+int main(int argc, char* argv[])
+{
+	try
+	{
+		if (argc != 3)
+		{
+			std::cout << "Usage: client <host> <port>" << std::endl;
+			return 1;
+		}
 
-    // Resolve the server address and port
-    iResult = getaddrinfo(argv[1], DEFAULT_PORT, &hints, &result);
-    if (iResult != 0) {
-        printf("getaddrinfo failed with error: %d\n", iResult);
-        WSACleanup();
-        return 1;
-    }
+		boost::asio::io_context io_context;
 
-    // Attempt to connect to an address until one succeeds
-    for (ptr = result; ptr != NULL;ptr = ptr->ai_next) {
+		boost::asio::ip::tcp::resolver resolver(io_context);
+		boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(argv[1], argv[2]);
 
-        // Create a SOCKET for connecting to server
-        ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype,
-            ptr->ai_protocol);
-        if (ConnectSocket == INVALID_SOCKET) {
-            printf("socket failed with error: %ld\n", WSAGetLastError());
-            WSACleanup();
-            return 1;
-        }
+		boost::asio::ip::tcp::socket socket(io_context);
+		boost::asio::connect(socket, endpoints);
 
-        // Connect to server.
-        iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-        if (iResult == SOCKET_ERROR) {
-            closesocket(ConnectSocket);
-            ConnectSocket = INVALID_SOCKET;
-            continue;
-        }
-        break;
-    }
+		std::cout << "Welcome!\n";
 
-    freeaddrinfo(result);
+		boost::array<char, 128> buf;
+		
+		std::string flag = "auth";
+		boost::system::error_code error;
 
-    if (ConnectSocket == INVALID_SOCKET) {
-        printf("Unable to connect to server!\n");
-        WSACleanup();
-        return 1;
-    }
+		boost::asio::write(socket, boost::asio::buffer(flag), error);
 
-    // Input user data
+		// Enter username and password
 
-    std::string username;
-    std::string password;
-    char status;
+		std::string username;
+		std::string password;
+		bool authResult{ 0 };
 
-    while (1)
-    {
-        system("cls");
-        std::cout << "Enter username: ";
-        std::getline(std::cin, username);
+		do
+		{
+			std::system("cls");
+			std::cout << "Enter your username: ";
+			std::getline(std::cin, username);
+			std::cout << "Enter your password: ";
+			std::getline(std::cin, password);
 
-        std::cout << "Enter password: ";
-        std::getline(std::cin, password);
+			boost::asio::write(socket, boost::asio::buffer(username + ':' + password), error);
 
-        iResult = send(ConnectSocket, username.c_str(), username.length(), 0);
-        if (iResult == SOCKET_ERROR) {
-            printf("username send failed with error: %d\n", WSAGetLastError());
-            closesocket(ConnectSocket);
-            WSACleanup();
-            return 1;
-        }
+			size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
+			if (std::string(buf.data(), r_bytes) == "auth")
+				authResult = 1;
+		} while (!authResult);
+		
+		// Main menu
+		for (;;)
+		{
+			std::system("cls");
+			flag = "show";
+			std::string rooms;
 
-        iResult = send(ConnectSocket, password.c_str(), password.length(), 0);
-        if (iResult == SOCKET_ERROR) {
-            printf("password send failed with error: %d\n", WSAGetLastError());
-            closesocket(ConnectSocket);
-            WSACleanup();
-            return 1;
-        }
+			boost::asio::write(socket, boost::asio::buffer(flag), error);
+			
+			// Read user's rooms
+			size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
 
-        iResult = recv(ConnectSocket, &status, sizeof(status), 0);
-        if (iResult == SOCKET_ERROR) {
-            printf("status recv failed with error: %d\n", WSAGetLastError());
-            closesocket(ConnectSocket);
-            WSACleanup();
-            return 1;
-        }
+			std::cout << "\tRooms:\n";
+			int i = 0;
+			std::cout.write(buf.data(), r_bytes);
 
-        if (status == '1')
-        {
-            system("cls");
-            std::cout << "Authentication passed\n";
-            break;
-        }
+			std::cout << "\nJoin a room: \"join <room_name>\"\n";
+			std::cout << "Create a room: \"create <room_name>\"\n";
+			std::cout << "Delete a room: \"delete <room_name>\"\n";
 
-    }
+			// Main menu command
+			std::string user_input;
+			std::string room{"null"};
+			std::string m_command{"null"};
+			std::getline(std::cin, user_input);
 
-    // show roooms
-    iResult = recv(ConnectSocket, &status, sizeof(status), 0);
-    if (iResult == SOCKET_ERROR) {
-        printf("status recv failed with error: %d\n", WSAGetLastError());
-        closesocket(ConnectSocket);
-        WSACleanup();
-        return 1;
-    }
+			std::istringstream iss(user_input);
+			iss >> m_command >> room;
 
+			if (m_command == "join")
+			{
+				boost::asio::write(socket, boost::asio::buffer(m_command), error);
 
-    if (status == '1')
-    {
-        std::string rooms;
-        iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
-        if (iResult == SOCKET_ERROR) {
-            printf("rooms recv failed with error: %d\n", WSAGetLastError());
-            closesocket(ConnectSocket);
-            WSACleanup();
-            return 1;
-        }
-        recvbuf[iResult-1] = '\0';
-        rooms = recvbuf;
+				// Inside the room
+				for (;;)
+				{
+					std::system("cls");
+					boost::array<char, 1024> buf_msg;
+					std::string r_command;
+					std::string user_name;
 
-        std::cout << "Your rooms: " << '\n';
-        std::cout << rooms << '\n';
-    }
-    else 
-    {
-        std::cout << "You don't have rooms.\n";
-        std::string name_room;
-        std::cout << "Enter room's name: ";
-        std::getline(std::cin, name_room);
+					std::cout << room << " BACK TO THE MENU \"/back\"\n" << std::endl;
 
-        iResult = send(ConnectSocket, name_room.c_str(), strlen(name_room.c_str()), 0);
-        if (iResult == SOCKET_ERROR) {
-            printf("room's name send failed with error: %d\n", WSAGetLastError());
-            closesocket(ConnectSocket);
-            WSACleanup();
-            return 1;
-        }
+					// Send name of room to join
+					boost::asio::write(socket, boost::asio::buffer(room), error);
+					
+					// Show room's messages
+					size_t r_bytes = socket.read_some(boost::asio::buffer(buf_msg), error);
+					std::cout.write(buf_msg.data(), r_bytes);
+					
+					// Split the message
+					std::getline(std::cin, user_input);
+					iss = std::istringstream(user_input);
+					iss >> r_command >> user_name;
 
-    }
+					if (r_command == "/back")
+					{
+						// Send command "/back"
+						boost::asio::write(socket, boost::asio::buffer(r_command), error);
+						
+						// Receive a room name
+						size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
+						break;
+					}
 
+					else if (r_command == "/add")
+					{
+						// Send command "/add"
+						boost::asio::write(socket, boost::asio::buffer(r_command), error);
+						
+						// Send user name to add to the room
+						std::cout << "User name: " << user_name << std::endl;
+						boost::asio::write(socket, boost::asio::buffer(user_name), error);
+						
+						continue;
+					}
 
-    // shutdown the connection since no more data will be sent
-    iResult = shutdown(ConnectSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) {
-        printf("shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(ConnectSocket);
-        WSACleanup();
-        return 1;
-    }
+					else if (r_command == "/kick")
+					{
+						// Send command "/kick"
+						boost::asio::write(socket, boost::asio::buffer(r_command), error);
+						
+						// Send user name to kick it from the room
+						boost::asio::write(socket, boost::asio::buffer(user_name), error);
+						size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
+						std::cout.write(buf.data(), r_bytes);
+					}
 
-    // Receive until the peer closes the connection
-    do {
+					else
+					{
+						// Send a message
+						boost::asio::write(socket, boost::asio::buffer(user_input), error);
+					}
 
-        iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
-        if (iResult > 0)
-            {
-                printf("Bytes received: %d\n", iResult);
-                std::cout << recvbuf << '\n';
-            }
-            
-        else if (iResult == 0)
-            printf("Connection closed\n");
-        else
-            printf("recv failed with error: %d\n", WSAGetLastError());
+				}
+				continue;
+			}
+			else if (m_command == "create")
+			{
+				boost::asio::write(socket, boost::asio::buffer(m_command), error);
 
-    } while (iResult > 0);
+				boost::asio::write(socket, boost::asio::buffer(room), error);
+			}
+			else if (m_command == "delete")
+			{
+				boost::asio::write(socket, boost::asio::buffer(m_command), error);
 
-    // cleanup
-    closesocket(ConnectSocket);
-    WSACleanup();
+				boost::asio::write(socket, boost::asio::buffer(room), error);
+			}
+			else
+			{
+				continue;
+			}
+		}
 
-    return 0;
+		for (;;)
+		{
+
+			size_t r_byts = socket.read_some(boost::asio::buffer(buf), error);
+			std::cout.write(buf.data(), r_byts);
+
+			if (error == boost::asio::error::eof)
+				break;
+			else if (error)
+				throw boost::system::system_error(error);
+		}
+	}
+	catch(std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+	}
 }
