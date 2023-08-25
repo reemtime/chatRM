@@ -21,6 +21,8 @@ public:
 
 	bool createTables();
 
+	bool registerUser(const std::string& client_name, const std::string& client_pass);
+
 	bool authenticateUser(const std::string& client_name, const std::string& client_pass);
 
 	bool createRoom(const std::string& room_name);

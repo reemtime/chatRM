@@ -8,7 +8,6 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/bind/bind.hpp>
 #include <boost/array.hpp>
-#include <nlohmann/json.hpp>
 #include <sstream>
 
 
@@ -58,7 +57,6 @@ private:
 		: socket_(io_context), db_server_(db_server)
 	{}
 
-
 	void handle_flag_read(const boost::system::error_code& error, size_t bytes_transferred)
 	{
 		socket_.async_read_some(boost::asio::buffer(buf_),
@@ -76,6 +74,14 @@ private:
 		{
 			socket_.async_read_some(boost::asio::buffer(buf_),
 				bind(&tcp_connection::handle_auth, shared_from_this(),
+					boost::asio::placeholders::error,
+					boost::asio::placeholders::bytes_transferred));
+		}
+
+		else if (flag == "register")
+		{
+			socket_.async_read_some(boost::asio::buffer(buf_),
+				bind(&tcp_connection::handle_register, shared_from_this(),
 					boost::asio::placeholders::error,
 					boost::asio::placeholders::bytes_transferred));
 		}
@@ -180,6 +186,53 @@ private:
 		}
 	}
 	
+	void handle_register(const boost::system::error_code& error, size_t bytes_transferred)
+	{
+		if (!error)
+		{
+			std::string result;
+			std::string data(buf_.data(), bytes_transferred);
+			size_t separator = data.find(':');
+
+
+			username_ = data.substr(0, separator);
+			std::string password = data.substr(separator + 1);
+
+			std::cout << "User: " << username_ << std::endl;
+			std::cout << "Pass: " << password << std::endl;
+
+			if (db_server_.registerUser(username_, password))
+			{
+				std::cout << "User has been registered\n";
+				result = "register";
+				socket_.async_write_some(boost::asio::buffer(result),
+					bind(&tcp_connection::handle_flag_read, shared_from_this(),
+						boost::asio::placeholders::error,
+						boost::asio::placeholders::bytes_transferred));
+			}
+			else
+			{
+				result = "null";
+				socket_.async_write_some(boost::asio::buffer(result),
+					bind(&tcp_connection::handle_register_read, shared_from_this(),
+						boost::asio::placeholders::error,
+						boost::asio::placeholders::bytes_transferred));
+			}
+		}
+		else
+		{
+			std::cout << "Error register" << std::endl;
+		}
+	}
+
+	void handle_register_read(const boost::system::error_code& error, size_t bytes_transferred)
+	{
+		socket_.async_read_some(boost::asio::buffer(buf_),
+			bind(&tcp_connection::handle_register, shared_from_this(),
+				boost::asio::placeholders::error,
+				boost::asio::placeholders::bytes_transferred));
+	}
+
 	void handle_auth_read(const boost::system::error_code& error, size_t bytes_transferred)
 	{
 		socket_.async_read_some(boost::asio::buffer(buf_),

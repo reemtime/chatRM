@@ -32,8 +32,6 @@ int main(int argc, char* argv[])
 		boost::asio::ip::tcp::socket socket(io_context);
 		boost::asio::connect(socket, endpoints);
 
-		std::cout << "Welcome!\n";
-
 		boost::array<char, 128> buf;
 		
 		std::string flag = "auth";
@@ -45,22 +43,52 @@ int main(int argc, char* argv[])
 
 		std::string username;
 		std::string password;
-		bool authResult{ 0 };
+		int operation;
 
-		do
+		std::cout << "1. Register\n2. Log in\n";
+		std::cin >> operation;
+		std::cin.clear();
+
+
+		switch (operation)
 		{
-			std::system("cls");
-			std::cout << "Enter your username: ";
-			std::getline(std::cin, username);
-			std::cout << "Enter your password: ";
-			std::getline(std::cin, password);
+			case 1:
+			{
+				while (true)
+				{
+					std::system("cls");
+					std::cout << "Register\n";
+					std::cout << "Enter your username: ";
+					std::getline(std::cin, username);
+					std::cout << "Enter your password: ";
+					std::getline(std::cin, password);
 
-			boost::asio::write(socket, boost::asio::buffer(username + ':' + password), error);
+					boost::asio::write(socket, boost::asio::buffer(username + ':' + password), error);
 
-			size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
-			if (std::string(buf.data(), r_bytes) == "auth")
-				authResult = 1;
-		} while (!authResult);
+					size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
+					if (std::string(buf.data(), r_bytes) == "register")
+						break;
+				}
+			}
+			case 2:
+			{
+				while (true)
+				{
+					std::system("cls");
+					std::cout << "Log in \n";
+					std::cout << "Enter your username: ";
+					std::getline(std::cin, username);
+					std::cout << "Enter your password: ";
+					std::getline(std::cin, password);
+
+					boost::asio::write(socket, boost::asio::buffer(username + ':' + password), error);
+
+					size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
+					if (std::string(buf.data(), r_bytes) == "auth")
+						break;
+				}
+			}
+		}
 		
 		// Main menu
 		for (;;)

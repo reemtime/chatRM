@@ -55,6 +55,34 @@ bool db_server::createTables()
     }
 }
 
+bool db_server::registerUser(const std::string& client_name, const std::string& client_pass)
+{
+    try
+    {
+        sql::PreparedStatement* pstmt;
+        sql::ResultSet* res;
+
+        pstmt = con_->prepareStatement("INSERT INTO users(username, password) VALUES(?, ?)");
+        pstmt->setString(1, client_name);
+        pstmt->setString(2, client_pass);
+
+        res = pstmt->executeQuery();
+
+        bool result = res;
+
+        delete res;
+        delete pstmt;
+
+        return result;
+    }
+    catch (sql::SQLException e)
+    {
+        std::cout << "Register error: " << e.what() << '\n';
+        system("pause");
+        exit(1);
+    }
+}
+
 bool db_server::authenticateUser(const std::string& client_name, const std::string& client_pass)
 {
     try
