@@ -1,0 +1,3 @@
+/home/night/Desktop/project/chatRM/Client/build/CMakeFiles/client.dir
+/home/night/Desktop/project/chatRM/Client/build/CMakeFiles/edit_cache.dir
+/home/night/Desktop/project/chatRM/Client/build/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libdbrequests.a CMakeFiles/dbrequests.dir/src/db.cpp.o
+/usr/bin/ranlib libdbrequests.a

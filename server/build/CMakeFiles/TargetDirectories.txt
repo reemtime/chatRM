@@ -1,0 +1,6 @@
+/home/night/Desktop/project/chatRM/server/build/CMakeFiles/server.dir
+/home/night/Desktop/project/chatRM/server/build/CMakeFiles/edit_cache.dir
+/home/night/Desktop/project/chatRM/server/build/CMakeFiles/rebuild_cache.dir
+/home/night/Desktop/project/chatRM/server/build/lib/libdb/CMakeFiles/dbrequests.dir
+/home/night/Desktop/project/chatRM/server/build/lib/libdb/CMakeFiles/edit_cache.dir
+/home/night/Desktop/project/chatRM/server/build/lib/libdb/CMakeFiles/rebuild_cache.dir
