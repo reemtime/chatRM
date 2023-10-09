@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.2)
 project(server VERSION 0.0.1)
 
 find_package(Boost REQUIRED COMPONENTS system)
-find_package(MySQLConnectorCPP)
 
 add_subdirectory(lib/libdb)
 
@@ -16,3 +15,5 @@ target_include_directories(server PUBLIC
 ) 
 
 target_link_libraries(server PUBLIC dbrequests Boost::system mysqlcppconn)
+
+install(TARGETS server DESTINATION server/bin)

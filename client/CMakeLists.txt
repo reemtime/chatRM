@@ -9,3 +9,5 @@ set(SOURCES src/client.cpp)
 add_executable(client ${SOURCES})
 
 target_link_libraries(client PUBLIC Boost::system)
+
+install(TARGETS client DESTINATION client/bin)

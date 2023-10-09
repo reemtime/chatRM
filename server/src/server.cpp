@@ -443,7 +443,7 @@ int main()
 	try
 	{
 		boost::asio::io_context io_context;
-		tcp_server(io_context);
+		tcp_server server(io_context);
 		io_context.run();
 
 	}
