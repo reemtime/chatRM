@@ -45,8 +45,8 @@ public:
 
 private:
 
-	sql::Connection* connectToDatebase(const std::string& dbServer, const std::string& dbUsername,
+    std::unique_ptr<sql::Connection> connectToDatebase(const std::string& dbServer, const std::string& dbUsername,
 		const std::string& dbPassword, const std::string& dbName);
 
-	sql::Connection* con_;
+    std::unique_ptr<sql::Connection> con_;
 };

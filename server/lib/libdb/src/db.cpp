@@ -8,16 +8,13 @@ db_server::db_server()
 
 db_server::~db_server()
 {
-    delete con_;
 }
 
 bool db_server::createTables()
 {
     try
     {
-        sql::Statement* stmt;
-
-        stmt = con_->createStatement();
+        std::unique_ptr<sql::Statement> stmt{con_->createStatement()};
 
         stmt->execute("CREATE TABLE IF NOT EXISTS rooms(room_id INT PRIMARY KEY AUTO_INCREMENT, \
                                 name VARCHAR(255) NOT NULL);");
@@ -44,14 +41,13 @@ bool db_server::createTables()
                                 FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE);");
 
         std::cout << "Table members has been created" << std::endl;
+        return true;
 
-        delete stmt;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Creating tables failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -59,27 +55,21 @@ bool db_server::registerUser(const std::string& client_name, const std::string& 
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt{
+            con_->prepareStatement("INSERT INTO users(username, password) VALUES(?, ?)")
+        };
 
-        pstmt = con_->prepareStatement("INSERT INTO users(username, password) VALUES(?, ?)");
         pstmt->setString(1, client_name);
         pstmt->setString(2, client_pass);
 
-        res = pstmt->executeQuery();
-
-        bool result = res;
-
-        delete res;
-        delete pstmt;
+        bool result = pstmt->executeQuery();
 
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Register error: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -87,29 +77,24 @@ bool db_server::authenticateUser(const std::string& client_name, const std::stri
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
+        std::unique_ptr<sql::ResultSet> res;
 
         std::string query = "SELECT * FROM users WHERE username = ? and password = ?";
 
-        pstmt = con_->prepareStatement(query);
+        pstmt.reset(con_->prepareStatement(query));
 
         pstmt->setString(1, client_name);
         pstmt->setString(2, client_pass);
 
-        res = pstmt->executeQuery();
+        res.reset(pstmt->executeQuery());
         bool result = res->next();
-
-        delete pstmt;
-        delete res;
-
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Authenticatate user failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -118,31 +103,27 @@ std::vector<std::string> db_server::showRooms(const std::string& client_name)
     try
     {
         std::vector<std::string> rooms;
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
+        std::unique_ptr<sql::ResultSet> res;
 
-        pstmt = con_->prepareStatement(
-            "SELECT rooms.name FROM members INNER JOIN rooms ON rooms.room_id = members.room_id WHERE members.user_id = ?");
+        pstmt.reset(con_->prepareStatement(
+                        "SELECT rooms.name FROM members INNER JOIN rooms ON rooms.room_id = members.room_id WHERE members.user_id = ?"));
 
         pstmt->setInt(1, getUserId(client_name));
-        res = pstmt->executeQuery();
+        res.reset(pstmt->executeQuery());
 
         while (res->next())
         {
             rooms.push_back(res->getString("name"));
         }
 
-        delete res;
-        delete pstmt;
-
         return rooms;
     }
 
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Show rooms failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -150,30 +131,25 @@ int db_server::getUserId(const std::string& client_name)
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
+        std::unique_ptr<sql::ResultSet> res;
         int result;
 
-        pstmt = con_->prepareStatement("SELECT user_id FROM users WHERE username = ?");
+        pstmt.reset(con_->prepareStatement("SELECT user_id FROM users WHERE username = ?"));
         pstmt->setString(1, client_name);
 
-        res = pstmt->executeQuery();
+        res.reset(pstmt->executeQuery());
         while (res->next())
         {
             result = res->getInt(1);
         }
 
-
-        delete res;
-        delete pstmt;
-
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Get user_id failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -181,30 +157,25 @@ int db_server::getRoomId(const std::string& room_name)
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
+        std::unique_ptr<sql::ResultSet> res;
         int result;
 
-        pstmt = con_->prepareStatement("SELECT room_id FROM rooms WHERE name = ?");
+        pstmt.reset(con_->prepareStatement("SELECT room_id FROM rooms WHERE name = ?"));
         pstmt->setString(1, room_name);
 
-        res = pstmt->executeQuery();
+        res.reset(pstmt->executeQuery());
         while (res->next())
         {
             result = res->getInt(1);
         }
 
-
-        delete res;
-        delete pstmt;
-
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Get room_id failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -212,26 +183,19 @@ bool db_server::createRoom(const std::string& room_name)
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
 
-        pstmt = con_->prepareStatement("INSERT INTO rooms(name) VALUES(?)");
+        pstmt.reset(con_->prepareStatement("INSERT INTO rooms(name) VALUES(?)"));
         pstmt->setString(1, room_name);
 
-        res = pstmt->executeQuery();
-
-        bool result = res;
-
-        delete res;
-        delete pstmt;
+        bool result = pstmt->executeQuery();
 
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Create room failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -239,26 +203,19 @@ bool db_server::deleteRoom(const std::string& room_name)
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
 
-        pstmt = con_->prepareStatement("DELETE FROM rooms WHERE name = ?");
+        pstmt.reset(con_->prepareStatement("DELETE FROM rooms WHERE name = ?"));
         pstmt->setString(1, room_name);
 
-        res = pstmt->executeQuery();
-
-        bool result = res;
-
-        delete res;
-        delete pstmt;
+        bool result = pstmt->executeQuery();
 
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Delete room failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -281,27 +238,20 @@ bool db_server::addMember(const std::string& room_name, const std::string& user_
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
 
-        pstmt = con_->prepareStatement("INSERT INTO members(room_id, user_id) VALUES(?, ?)");
+        pstmt.reset(con_->prepareStatement("INSERT INTO members(room_id, user_id) VALUES(?, ?)"));
         pstmt->setInt(1, getRoomId(room_name));
         pstmt->setInt(2, getUserId(user_name));
 
-        res = pstmt->executeQuery();
-
-        bool result = res;
-
-        delete res;
-        delete pstmt;
+        bool result = pstmt->executeQuery();
 
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Error add the member: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -309,27 +259,20 @@ bool db_server::kickMember(const std::string& room_name, const std::string& user
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
 
-        pstmt = con_->prepareStatement("DELETE FROM members WHERE room_id = ? AND user_id = ?");
+        pstmt.reset(con_->prepareStatement("DELETE FROM members WHERE room_id = ? AND user_id = ?"));
         pstmt->setInt(1, getRoomId(room_name));
         pstmt->setInt(2, getUserId(user_name));
 
-        res = pstmt->executeQuery();
-
-        bool result = res;
-
-        delete res;
-        delete pstmt;
+        bool result = pstmt->executeQuery();
 
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Error add the member: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -337,28 +280,21 @@ bool db_server::addMessage(const std::string& user_name, const std::string& room
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
 
-        pstmt = con_->prepareStatement("INSERT INTO messages(user_id, room_id, message_text) VALUES(?, ?, ?)");
+        pstmt.reset(con_->prepareStatement("INSERT INTO messages(user_id, room_id, message_text) VALUES(?, ?, ?)"));
         pstmt->setInt(1, getUserId(user_name));
         pstmt->setInt(2, getRoomId(room_name));
         pstmt->setString(3, message);
 
-        res = pstmt->executeQuery();
-
-        bool result = res;
-
-        delete res;
-        delete pstmt;
+        bool result = pstmt->executeQuery();
 
         return result;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Error receiving the message: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
@@ -367,19 +303,19 @@ std::vector<std::string> db_server::joinToRoom(const std::string& room_name)
 {
     try
     {
-        sql::PreparedStatement* pstmt;
-        sql::ResultSet* res;
+        std::unique_ptr<sql::PreparedStatement> pstmt;
+        std::unique_ptr<sql::ResultSet> res;
         MessageFromRoom msg;
 
         std::vector<std::string> messages;
 
 
-        pstmt = con_->prepareStatement("SELECT users.username, messages.message_text, messages.sent_at \
-                                        FROM messages INNER JOIN users ON messages.user_id = users.user_id \
-                                        INNER JOIN rooms ON messages.room_id = rooms.room_id WHERE messages.room_id = ?;");
+        pstmt.reset(con_->prepareStatement("SELECT users.username, messages.message_text, messages.sent_at \
+                                           FROM messages INNER JOIN users ON messages.user_id = users.user_id \
+                                           INNER JOIN rooms ON messages.room_id = rooms.room_id WHERE messages.room_id = ?;"));
         pstmt->setInt(1, getRoomId(room_name));
 
-        res = pstmt->executeQuery();
+        res.reset(pstmt->executeQuery());
 
         while (res->next())
         {
@@ -390,38 +326,31 @@ std::vector<std::string> db_server::joinToRoom(const std::string& room_name)
             messages.push_back(msg.msgToString());
         }
 
-        delete res;
-        delete pstmt;
-
         return messages;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Join room failed: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
 
-sql::Connection* db_server::connectToDatebase(const std::string& dbServer, const std::string& dbUsername,
+std::unique_ptr<sql::Connection> db_server::connectToDatebase(const std::string& dbServer, const std::string& dbUsername,
                                     const std::string& dbPassword, const std::string& dbName)
 {
-    sql::Driver* driver;
-    sql::Connection* con;
-
     try
     {
+        sql::Driver* driver(get_driver_instance());
+        std::unique_ptr<sql::Connection> con;
         std::cout << dbServer << " " << dbUsername << " " << dbPassword << std::endl;
-        driver = get_driver_instance();
-        con = driver->connect(dbServer, dbUsername, dbPassword);
+        con.reset(driver->connect(dbServer, dbUsername, dbPassword));
         con->setSchema(dbName);
         std::cout << "Database is connected.\n";
         return con;
     }
-    catch (sql::SQLException e)
+    catch (const sql::SQLException& e)
     {
         std::cout << "Could not connect to server. Error message: " << e.what() << '\n';
-        system("pause");
-        exit(1);
+        throw;
     }
 }
