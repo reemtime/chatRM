@@ -1,13 +1,26 @@
-cmake_minimum_required(VERSION 3.2)
-
+cmake_minimum_required(VERSION 3.20)
+# set(Boost_DEBUG ON)
 project(client VERSION 0.0.1)
 
-find_package(Boost REQUIRED COMPONENTS system)
-set(SOURCES src/client.cpp)
+set(HEADERS include/client.hpp include/message.hpp)
+set(SOURCES src/main.cpp src/client.cpp)
 
+set(Boost_USE_STATIC_LIBS        ON) 
+set(Boost_USE_DEBUG_LIBS        OFF)
+set(Boost_USE_RELEASE_LIBS       ON) 
+set(Boost_USE_MULTITHREADED      ON)
+set(Boost_USE_STATIC_RUNTIME    OFF)
 
-add_executable(client ${SOURCES})
+find_package(Boost 1.7 REQUIRED COMPONENTS system serialization)
+if(Boost_FOUND)
+  include_directories(${Boost_INCLUDE_DIRS} include)
+  add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+  target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES})
+  message("Boost version: " ${Boost_VERSION})
+endif()
 
-target_link_libraries(client PUBLIC Boost::system)
+if(WIN32)
+  target_link_libraries(${PROJECT_NAME} ws2_32)
+endif()
 
-install(TARGETS client DESTINATION client/bin)
+install(TARGETS ${PROJECT_NAME} DESTINATION client/bin)

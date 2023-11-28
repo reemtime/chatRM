@@ -1,224 +1,322 @@
-#include <iostream>
-#include <boost/asio.hpp>
-#include <boost/array.hpp>
+#include "client.hpp"
 
-void join_room(boost::asio::ip::tcp::socket& socket, boost::system::error_code& error, std::string& room_name)
+Client::Client(boost::asio::io_context& io_context,const boost::asio::ip::tcp::resolver::results_type& endpoints) : io_context_(io_context), socket_(io_context)
 {
-	boost::array<char, 256> buf;
-	std::string message;
-
-	std::cout << room_name << std::endl;
-
-	boost::asio::write(socket, boost::asio::buffer(room_name), error);
-	size_t r_bytes = socket.read_some(boost::asio::buffer(message), error);
-	std::cout.write(buf.data(), r_bytes);
+    connect(endpoints);
 }
 
-int main(int argc, char* argv[])
+Client::~Client()
 {
-	try
-	{
-		if (argc != 3)
-		{
-			std::cout << "Usage: client <host> <port>" << std::endl;
-			return 1;
-		}
+    close();
+}
 
-		boost::asio::io_context io_context;
+void Client::close()
+{
+    boost::asio::post(io_context_, [this]() { socket_.close(); });
+}
 
-		boost::asio::ip::tcp::resolver resolver(io_context);
-		boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(argv[1], argv[2]);
+void Client::connect(const boost::asio::ip::tcp::resolver::results_type& endpoints)
+{
+    boost::asio::async_connect(socket_, endpoints,
+    [this](boost::system::error_code ec, boost::asio::ip::tcp::endpoint)
+    {
+        if (!ec)
+        {
+            std::cout << "Connected to server" << std::endl;
 
-		boost::asio::ip::tcp::socket socket(io_context);
-		boost::asio::connect(socket, endpoints);
+            while(true)
+            {
+                std::string command;
+                
+                clear_screen();
+                std::cout << "1. Register\n2. Log in \n";
+                std::getline(std::cin, command);
 
-		boost::array<char, 128> buf;
-		
-		std::string flag = "auth";
-		boost::system::error_code error;
+                if(command == "1")
+                {
+                    registration();
+                    break;
+                }
+                else if(command == "2")
+                {
+                    authentication();
+                    break;
+                }
+                else
+                    continue;
+            }            
+            send_message();
+        }
+        else
+        {
+            close();
+        }
+    });
+}
 
-		boost::asio::write(socket, boost::asio::buffer(flag), error);
+void Client::user_input()
+{
+    std::string user_input;
+    std::string command;
+    std::string argument;          
+    
+    std::cout << "Enter message: ";
+    std::getline(std::cin, user_input);
+    std::istringstream iss(user_input);
+    iss >> command >> argument;
 
-		// Enter username and password
+    if(command == "/help")
+    {
+        help();
+    }
+    else
+    {
+        clear_message();
+        client_msg_.status = 0;
+        client_msg_.command = command;
+        client_msg_.data.push_back(argument);
+        send_message();
+    }
 
-		std::string username;
-		std::string password;
-		int operation;
+}
 
-		std::cout << "1. Register\n2. Log in\n";
-		std::cin >> operation;
-		std::cin.clear();
+void Client::room_message()
+{
+    std::string command;
+    std::string argument; 
+    std::string user_message;
+    clear_message();
 
+    std::cout << "Enter message: ";
+    std::getline(std::cin, user_message);
+    std::istringstream iss(user_message);
+    iss >> command >> argument;
+    if(command == "/add")
+    {
+        client_msg_.command = "/add";
+        client_msg_.data.push_back(argument);
+    }
+    else if(command == "/help")
+    {
+        help();
+    }
+    else if(command == "/kick")
+    {
+        client_msg_.command = "/kick";
+        client_msg_.data.push_back(argument);
+    }
+    else if(command == "/menu")
+    {
+        client_msg_.command = "/menu";
+        client_msg_.data.push_back(argument);
+    }
+    else
+    {
+        client_msg_.command = "/message";
+        client_msg_.data.push_back(user_message);
+    }                     
+}
 
-		switch (operation)
-		{
-			case 1:
-			{
-				while (true)
-				{
-					std::system("cls");
-					std::cout << "Register\n";
-					std::cout << "Enter your username: ";
-					std::getline(std::cin, username);
-					std::cout << "Enter your password: ";
-					std::getline(std::cin, password);
+void Client::send_message()
+{
+    socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(client_msg_)),
+    [this](boost::system::error_code ec, std::size_t bytes_transferred)
+    {
+        if (!ec)
+        {   
+            receive_message();
+        }
+        else
+        {
+            close();
+        }
+    });       
+}
 
-					boost::asio::write(socket, boost::asio::buffer(username + ':' + password), error);
+void Client::receive_message()
+{
+    socket_.async_read_some(boost::asio::buffer(buf_),
+    [this](boost::system::error_code ec, std::size_t bytes_transferred)
+    {
+        if (!ec)
+        {
+            std::string message(buf_.data(), bytes_transferred);
+            server_msg_ = boost::serialization::deserialize_message(message);
+            if(server_msg_.status == 0)
+            {
+                clear_screen();
+                if(server_msg_.command == "/join")
+                {
+                    room_ = client_msg_.data.at(0);
+                    std::cout << "\tRoom <" << room_ << ">" <<std::endl;
+                    for(auto message : server_msg_.data)
+                    {
+                        std::cout << message << std::endl;
+                    }
+                    room_message();
+                    send_message();
+                }
+                else if(server_msg_.command == "auth")
+                {   
+                    if(server_msg_.data.at(0) == "error")                     
+                    {
+                        authentication();
+                        send_message();                               
+                    }
+                    else
+                    {
+                        client_msg_.command = "/menu";
+                        send_message();
+                    }
+                }
+                else if(server_msg_.command == "register")
+                {
+                    if(server_msg_.data.at(0) == "error")
+                    {
+                        registration();
+                        send_message(); 
+                    }
+                    else
+                    {
+                        authentication();
+                        send_message();
+                    }
+                }
+                else if(server_msg_.command == "/menu")
+                {
+                    std::cout << "\tRooms:\n";
+                    for(auto room : server_msg_.data)
+                    {
+                        std::cout << room << std::endl;
+                    }
+                    user_input();
 
-					size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
-					if (std::string(buf.data(), r_bytes) == "register")
-						break;
-				}
-			}
-			case 2:
-			{
-				while (true)
-				{
-					std::system("cls");
-					std::cout << "Log in \n";
-					std::cout << "Enter your username: ";
-					std::getline(std::cin, username);
-					std::cout << "Enter your password: ";
-					std::getline(std::cin, password);
+                }
+                else if(server_msg_.command == "/create")
+                {
+                    
+                }
+                else if(server_msg_.command == "/delete")
+                {
+                    
+                }                   
+                else if(server_msg_.command == "/add")
+                {
+                    if(server_msg_.data.at(0) == "error")
+                    {
+                        std::cerr << "User has not been added";
+                    }
+                    else
+                    {
+                        client_msg_.command = "/join";
+                        client_msg_.data.push_back("join");
+                        send_message();
+                    }
+                }
+                else if(server_msg_.command == "/kick")
+                {
+                    if(server_msg_.data.at(0) == "error")
+                    {
+                        std::cerr << "User has not been kicked";
+                    }
+                    else
+                    {
+                        client_msg_.command = "/join";
+                        client_msg_.data.push_back("/join");
+                        send_message();
+                    }
+                }    
+            }
+            else if(server_msg_.status == 1)
+            {
+                error_message(server_msg_.data.at(0));
+            }
+        }
+        else
+        {
+            close();
+        }
+    });       
+}
 
-					boost::asio::write(socket, boost::asio::buffer(username + ':' + password), error);
+void Client::clear_screen()
+{
+    #ifdef _WIN32
+        std::system("cls");
+    #else
+        std::system("clear");
+    #endif
+}
 
-					size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
-					if (std::string(buf.data(), r_bytes) == "auth")
-						break;
-				}
-			}
-		}
-		
-		// Main menu
-		for (;;)
-		{
-			std::system("cls");
-			flag = "show";
-			std::string rooms;
+void Client::clear_message()
+{
+    server_msg_.status = 0;
+    server_msg_.command = "";
+    server_msg_.data.clear();
 
-			boost::asio::write(socket, boost::asio::buffer(flag), error);
-			
-			// Read user's rooms
-			size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
+    client_msg_.status = 0;
+    client_msg_.command = "";
+    client_msg_.data.clear();
+}
 
-			std::cout << "\tRooms:\n";
-			int i = 0;
-			std::cout.write(buf.data(), r_bytes);
+void Client::authentication()
 
-			std::cout << "\nJoin a room: \"join <room_name>\"\n";
-			std::cout << "Create a room: \"create <room_name>\"\n";
-			std::cout << "Delete a room: \"delete <room_name>\"\n";
+{
+    clear_screen();
+    clear_message();
+    std::string username;
+    std::string password;
 
-			// Main menu command
-			std::string user_input;
-			std::string room{"null"};
-			std::string m_command{"null"};
-			std::getline(std::cin, user_input);
+    std::cout << "Log in \n";
+    std::cout << "Enter your username: ";
+    std::getline(std::cin, username);
+    std::cout << "Enter your password: ";
+    std::getline(std::cin, password);
 
-			std::istringstream iss(user_input);
-			iss >> m_command >> room;
+    client_msg_.command = "auth";
+    client_msg_.data.push_back(username);
+    client_msg_.data.push_back(password);
 
-			if (m_command == "join")
-			{
-				boost::asio::write(socket, boost::asio::buffer(m_command), error);
+}
 
-				// Inside the room
-				for (;;)
-				{
-					std::system("cls");
-					boost::array<char, 1024> buf_msg;
-					std::string r_command;
-					std::string user_name;
+void Client::registration()
+{
+    clear_screen();
+    clear_message();
+    std::string username;
+    std::string password;
 
-					std::cout << room << " BACK TO THE MENU \"/back\"\n" << std::endl;
+    std::cout << "Register\n";
+    std::cout << "Enter your username: ";
+    std::getline(std::cin, username);
+    std::cout << "Enter your password: ";
+    std::getline(std::cin, password);
 
-					// Send name of room to join
-					boost::asio::write(socket, boost::asio::buffer(room), error);
-					
-					// Show room's messages
-					size_t r_bytes = socket.read_some(boost::asio::buffer(buf_msg), error);
-					std::cout.write(buf_msg.data(), r_bytes);
-					
-					// Split the message
-					std::getline(std::cin, user_input);
-					iss = std::istringstream(user_input);
-					iss >> r_command >> user_name;
+    client_msg_.command = "register";
+    client_msg_.data.push_back(username);
+    client_msg_.data.push_back(password);
 
-					if (r_command == "/back")
-					{
-						// Send command "/back"
-						boost::asio::write(socket, boost::asio::buffer(r_command), error);
-						
-						// Receive a room name
-						size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
-						break;
-					}
+}
 
-					else if (r_command == "/add")
-					{
-						// Send command "/add"
-						boost::asio::write(socket, boost::asio::buffer(r_command), error);
-						
-						// Send user name to add to the room
-						std::cout << "User name: " << user_name << std::endl;
-						boost::asio::write(socket, boost::asio::buffer(user_name), error);
-						
-						continue;
-					}
+void Client::error_message(std::string& error)
+{
+    clear_screen();
+    clear_message();
+    std::cout << "Error: " << error << std::endl;
+    system("pause");
+    clear_screen();
+    user_input();
+}
 
-					else if (r_command == "/kick")
-					{
-						// Send command "/kick"
-						boost::asio::write(socket, boost::asio::buffer(r_command), error);
-						
-						// Send user name to kick it from the room
-						boost::asio::write(socket, boost::asio::buffer(user_name), error);
-						size_t r_bytes = socket.read_some(boost::asio::buffer(buf), error);
-						std::cout.write(buf.data(), r_bytes);
-					}
-
-					else
-					{
-						// Send a message
-						boost::asio::write(socket, boost::asio::buffer(user_input), error);
-					}
-
-				}
-				continue;
-			}
-			else if (m_command == "create")
-			{
-				boost::asio::write(socket, boost::asio::buffer(m_command), error);
-
-				boost::asio::write(socket, boost::asio::buffer(room), error);
-			}
-			else if (m_command == "delete")
-			{
-				boost::asio::write(socket, boost::asio::buffer(m_command), error);
-
-				boost::asio::write(socket, boost::asio::buffer(room), error);
-			}
-			else
-			{
-				continue;
-			}
-		}
-
-		for (;;)
-		{
-
-			size_t r_byts = socket.read_some(boost::asio::buffer(buf), error);
-			std::cout.write(buf.data(), r_byts);
-
-			if (error == boost::asio::error::eof)
-				break;
-			else if (error)
-				throw boost::system::system_error(error);
-		}
-	}
-	catch(std::exception& e)
-	{
-		std::cerr << e.what() << std::endl;
-	}
+void Client::help()
+{
+    std::cout<< "\tMenu commands:\n" 
+"/join <room name> - enter the room\n" 
+"/create <room name> - create the room\n" 
+"/delete <room name> - delete the room\n"
+"\tRoom commands:\n"
+"/menu - exit the menu\n"
+"/add <user name> - add user to the room\n"
+"/kick <user name> - remove user from the room" << std::endl;
+    user_input();
 }
