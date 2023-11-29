@@ -30,10 +30,14 @@ public:
 
     void start();
 
+    ~tcp_connection();
+
 private:
     tcp_connection(boost::asio::io_context& io_context, db_server& db_server);
 
     void clear_message();
+
+    void close_connection();
 
     void handle_message_read(const boost::system::error_code& error, size_t bytes_transferred);
 

@@ -16,7 +16,7 @@ class Client
         void close();
 
     private:
-        void connect(const boost::asio::ip::tcp::resolver::results_type& endpoints);
+        void connect(const boost::asio::ip::tcp::resolver::results_type& endpoints);     
 
         void user_input();
 
@@ -37,6 +37,8 @@ class Client
         void error_message(std::string& error);
 
         void help();
+
+        void disconnect();
 
     private:
         boost::asio::io_context& io_context_;

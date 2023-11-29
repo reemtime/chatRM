@@ -15,6 +15,27 @@ tcp::socket& tcp_connection::socket()
     return socket_;
 }
 
+tcp_connection::~tcp_connection()
+{
+    close_connection();
+}
+
+void tcp_connection::close_connection()
+{
+    boost::system::error_code ec;
+    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+    socket_.close(ec);
+
+    if (!ec)
+    {
+        std::cerr << username_ << " disconnected from server" << std::endl;
+    }
+    else
+    {
+        std::cerr << "Error : " << ec.message() << std::endl;
+    }
+}
+
 // Function for using a socket
 
 void tcp_connection::start()
@@ -29,10 +50,10 @@ void tcp_connection::start()
     }
     catch (const sql::SQLException& e)
     {
-        std::string response = "Database error";
+        server_msg_.data.push_back("Database error");
         std::cerr << "Database error: " << e.what() << '\n';
 
-        socket_.async_write_some(boost::asio::buffer(response),
+        socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
             bind(&tcp_connection::handle_data, shared_from_this(),
                 boost::asio::placeholders::error,
                 boost::asio::placeholders::bytes_transferred));
@@ -41,7 +62,7 @@ void tcp_connection::start()
 }
 
 tcp_connection::tcp_connection(boost::asio::io_context& io_context, db_server& db_server)
-    : socket_(io_context), db_server_(db_server)
+    : socket_(io_context), db_server_(db_server), username_("anon")
 {
     void clear_message();
 }
@@ -125,8 +146,8 @@ void tcp_connection::handle_data(const boost::system::error_code& error, size_t 
         }
         else
         {
-            std::cerr << "error: " << error.message() << std::endl;
-            socket_.close();
+            std::cerr << "error handle data: " << error.message() << std::endl;
+            close_connection();
         }
     }
     catch (const sql::SQLException& db_error)
@@ -144,8 +165,7 @@ void tcp_connection::handle_data(const boost::system::error_code& error, size_t 
     }
     catch(const std::exception& error)
     {
-        std::cerr << "error: " << error.what() << std::endl;
-        socket_.close();
+        std::cerr << "exception handle data: : " << error.what() << std::endl;
     }
 }
 
@@ -160,7 +180,7 @@ void tcp_connection::handle_auth(const boost::system::error_code& error, size_t 
 
         if (db_server_.authenticateUser(username_, password))
         {
-            std::cout << "auth successed\n";
+            std::cerr << "auth successed\n";
             server_msg_.data.push_back("ok");
             socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
                 bind(&tcp_connection::handle_message_read, shared_from_this(),
@@ -169,7 +189,7 @@ void tcp_connection::handle_auth(const boost::system::error_code& error, size_t 
         }
         else
         {
-            std::cout << "auth failed\n";
+            std::cerr << "auth failed\n";
             server_msg_.data.push_back("error");
             socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
                 bind(&tcp_connection::handle_message_read, shared_from_this(),
@@ -179,29 +199,38 @@ void tcp_connection::handle_auth(const boost::system::error_code& error, size_t 
     }
     else
     {
-        std::cout << "Error auth" << std::endl;
+        std::cerr << "Error auth" << std::endl;
+        close_connection();
     }
 }
 
 void tcp_connection::handle_menu(const boost::system::error_code& error, size_t bytes_transferred)
 {
-    server_msg_.command = "/menu";
-    server_msg_.data = db_server_.showRooms(username_);
-
-    if (server_msg_.data.empty())
+    if (!error)
     {
-        server_msg_.data.push_back("You don't have a rooms.");
-        socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
-            bind(&tcp_connection::handle_message_read, shared_from_this(),
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::bytes_transferred));
+        server_msg_.command = "/menu";
+        server_msg_.data = db_server_.showRooms(username_);
+
+        if (server_msg_.data.empty())
+        {
+            server_msg_.data.push_back("You don't have a rooms.");
+            socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
+                bind(&tcp_connection::handle_message_read, shared_from_this(),
+                    boost::asio::placeholders::error,
+                    boost::asio::placeholders::bytes_transferred));
+        }
+        else
+        {
+            socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
+                bind(&tcp_connection::handle_message_read, shared_from_this(),
+                    boost::asio::placeholders::error,
+                    boost::asio::placeholders::bytes_transferred));
+        }
     }
     else
     {
-        socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
-            bind(&tcp_connection::handle_message_read, shared_from_this(),
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::bytes_transferred));
+        std::cerr << "Error menu" << std::endl;
+        close_connection();
     }
 }
 
@@ -235,7 +264,8 @@ void tcp_connection::handle_register(const boost::system::error_code& error, siz
     }
     else
     {
-        std::cout << "Error register" << std::endl;
+        std::cerr << "Error register" << std::endl;
+        close_connection();
     }
 }
 
@@ -254,7 +284,8 @@ void tcp_connection::handle_create_room(const boost::system::error_code& error, 
     }
     else
     {
-        std::cout << "Error create room" << std::endl;
+        std::cerr << "Error create room" << std::endl;
+        close_connection();
     }
 }
 
@@ -270,30 +301,39 @@ void tcp_connection::handle_delete_room(const boost::system::error_code& error, 
     }
     else
     {
-        std::cout << "Error create room" << std::endl;
+        std::cerr << "Error create room" << std::endl;
+        close_connection();
     }
 }
 
 void tcp_connection::handle_room_join(const boost::system::error_code& error, size_t bytes_transferred)
 {
-    room_ = client_msg_.data.at(0);
-    server_msg_.command = "/join";
-    server_msg_.data = db_server_.joinToRoom(room_);
-
-    if (server_msg_.data.empty())
+    if(!error)
     {
-        server_msg_.data.push_back("You don't have a message.");
-        socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
-            bind(&tcp_connection::handle_message_read, shared_from_this(),
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::bytes_transferred));
+        room_ = client_msg_.data.at(0);
+        server_msg_.command = "/join";
+        server_msg_.data = db_server_.joinToRoom(room_);
+
+        if (server_msg_.data.empty())
+        {
+            server_msg_.data.push_back("You don't have a message.");
+            socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
+                bind(&tcp_connection::handle_message_read, shared_from_this(),
+                    boost::asio::placeholders::error,
+                    boost::asio::placeholders::bytes_transferred));
+        }
+        else
+        {
+            socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
+                bind(&tcp_connection::handle_message_read, shared_from_this(),
+                    boost::asio::placeholders::error,
+                    boost::asio::placeholders::bytes_transferred));
+        }
     }
     else
     {
-        socket_.async_write_some(boost::asio::buffer(boost::serialization::serialize_message(server_msg_)),
-            bind(&tcp_connection::handle_message_read, shared_from_this(),
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::bytes_transferred));
+        std::cerr << "Error room join" << std::endl;
+        close_connection();
     }
 }
 
@@ -311,7 +351,8 @@ void tcp_connection::handle_room_message(const boost::system::error_code& error,
     }
     else
     {
-
+        std::cerr << "Error read message" << std::endl;
+        close_connection();
     }
 
 }
@@ -337,7 +378,8 @@ void tcp_connection::handle_room_kick_member(const boost::system::error_code& er
     }
     else
     {
-
+        std::cerr << "Error kick user" << std::endl;
+        close_connection();
     }
 }
 
@@ -362,7 +404,8 @@ void tcp_connection::handle_room_add_member(const boost::system::error_code& err
     }
     else
     {
-
+        std::cerr << "Error add user" << std::endl;
+        close_connection();
     }
 }
 

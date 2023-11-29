@@ -7,7 +7,7 @@ Client::Client(boost::asio::io_context& io_context,const boost::asio::ip::tcp::r
 
 Client::~Client()
 {
-    close();
+    disconnect();
 }
 
 void Client::close()
@@ -99,6 +99,10 @@ void Client::room_message()
     else if(command == "/help")
     {
         help();
+    }
+    else if(command =="/exit")
+    {
+        disconnect();
     }
     else if(command == "/kick")
     {
@@ -311,12 +315,29 @@ void Client::error_message(std::string& error)
 void Client::help()
 {
     std::cout<< "\tMenu commands:\n" 
-"/join <room name> - enter the room\n" 
-"/create <room name> - create the room\n" 
-"/delete <room name> - delete the room\n"
-"\tRoom commands:\n"
-"/menu - exit the menu\n"
-"/add <user name> - add user to the room\n"
-"/kick <user name> - remove user from the room" << std::endl;
+    "/join <room name> - enter the room\n"
+    "/create <room name> - create the room\n"
+    "/delete <room name> - delete the room\n"
+    "\tRoom commands:\n"
+    "/menu - exit the menu\n"
+    "/add <user name> - add user to the room\n"
+    "/kick <user name> - remove user from the room" << std::endl;
     user_input();
 }
+
+void Client::disconnect()
+{
+    boost::system::error_code ec;
+    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+    socket_.close(ec);
+
+    if (!ec)
+    {
+        std::cout << "Disconnected from server" << std::endl;
+    }
+    else
+    {
+        std::cerr << "Error : " << ec.message() << std::endl;
+    }
+}
+
