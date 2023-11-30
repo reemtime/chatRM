@@ -1,13 +1,30 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.20)
+
+if(WIN32)
+  set(mysqlconn_include "C:/Program Files/MySQL/MySQL Connector C++ 8.2/include/jdbc")
+  set(mysqlcppconn_lib "C:/Program Files/MySQL/MySQL Connector C++ 8.2/lib64/vs14/mysqlcppconn.lib")
+endif()
+
 
 project(dbrequests)
 
 set(SOURCES src/db.cpp)
 set(HEADERS include/config.h include/db.h)
 
-add_library(dbrequests ${SOURCES} ${HEADERS})
-target_include_directories(dbrequests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_library(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
+if(UNIX)
+    target_include_directories(${PROJECT_NAME} PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(${PROJECT_NAME} PUBLIC mysqlcppconn)
+endif()
+
+if(WIN32)
+  target_include_directories(${PROJECT_NAME} PUBLIC 
+	${CMAKE_CURRENT_SOURCE_DIR}/include 
+	${mysqlconn_include})
+  target_link_libraries(${PROJECT_NAME} PUBLIC ${mysqlcppconn_lib})
+endif()
 
 
 
