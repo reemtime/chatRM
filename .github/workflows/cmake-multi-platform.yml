@@ -56,6 +56,13 @@ jobs:
           sudo apt-get install libmysqlcppconn-dev
         fi
       shell: bash
+    - name: Cache Boost for Windows
+      uses: actions/cache@v2
+      with:
+        path: |
+          C:/Program Files/Boost
+        key: boost-${{ runner.os }}-${{ hashFiles('**/*.txt') }}
+      if: runner.os == 'Windows'
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
