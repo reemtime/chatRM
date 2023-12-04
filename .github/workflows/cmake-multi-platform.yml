@@ -49,7 +49,7 @@ jobs:
       run: |
         if [ "$RUNNER_OS" == "Windows" ]; then
           choco install boost-msvc-14.2
-          choco install choco install mysql-odbc
+          choco install mysql-connector
         else
           sudo apt-get update
           sudo apt-get install libboost-all-dev
