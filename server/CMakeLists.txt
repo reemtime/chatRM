@@ -23,7 +23,7 @@ if(Boost_FOUND)
 endif()
 
 if(WIN32)
-  target_link_libraries(${PROJECT_NAME} ws2_32 wsock32)
+  target_link_libraries(${PROJECT_NAME} PUBLIC ws2_32 wsock32)
 endif()
 
 install(TARGETS server DESTINATION server/bin)
