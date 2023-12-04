@@ -45,22 +45,16 @@ jobs:
             c_compiler: cl
     steps:
     - uses: actions/checkout@v3
-    - name: Install Boost
+    - name: Install dependencies
       run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            choco install boost-msvc
-          else
-            sudo apt-get update
-            sudo apt-get install libboost-all-dev
-          fi
-    - name: Install mysql-connector
-      run: |      
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            choco install mysql-connector-c++
-          else
-            sudo apt-get update
-            sudo apt-get install libmysqlcppconn-dev
-          fi
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          choco install boost-msvc
+          choco install mysql-connector-c++
+        else
+          sudo apt-get update
+          sudo apt-get install libboost-all-dev
+          sudo apt-get install libmysqlcppconn-dev
+        fi
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
