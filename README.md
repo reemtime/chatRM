@@ -1,3 +1,5 @@
+[![CMake on multiple platforms](https://github.com/reemtime/chatRM/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/reemtime/chatRM/actions/workflows/cmake-multi-platform.yml)
+
 # chatRM
 
 Небольшой учебный проект, цель которого получение практического опыта работы на языке C++.
