@@ -49,8 +49,8 @@ jobs:
       run: |
         if [ "$RUNNER_OS" == "Windows" ]; then
           choco install boost-msvc-14.2
-          Invoke-WebRequest -Uri https://dev.mysql.com/get/Downloads/Connector-C++/mysql-connector-c++-8.2.0-winx64.msi -OutFile mysql-connector-c++-8.2.0-winx64.msi
-          Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i', 'mysql-connector-c++-8.2.0-winx64.msi', '/quiet'
+          curl -LO https://dev.mysql.com/get/Downloads/Connector-C++/mysql-connector-c++-8.2.0-winx64.zip
+          tar -xf "mysql-connector-c++-8.2.0-winx64.zip" -C "C:/Program Files/MySQL"
         else
           sudo apt-get update
           sudo apt-get install libboost-all-dev
