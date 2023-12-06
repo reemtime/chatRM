@@ -48,7 +48,7 @@ jobs:
     - name: Install dependencies
       run: |
         if [ "$RUNNER_OS" == "Windows" ]; then
-          choco install boost-msvc-14.1
+          choco install boost-msvc-14.3
           curl -LO https://dev.mysql.com/get/Downloads/Connector-C++/mysql-connector-c++-8.2.0-winx64.zip
           powershell -command "Expand-Archive -Path .\mysql-connector-c++-8.2.0-winx64.zip -DestinationPath 'C:\Program Files\MySQL'"
         else
