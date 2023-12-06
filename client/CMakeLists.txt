@@ -11,7 +11,7 @@ set(Boost_USE_STATIC_RUNTIME    OFF)
 set(HEADERS include/client.hpp include/message.hpp)
 set(SOURCES src/main.cpp src/client.cpp)
 
-find_package(Boost 1.7 REQUIRED COMPONENTS system serialization)
+find_package(Boost 1.7 REQUIRED COMPONENTS system serialization date_time)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS} include)
   add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
