@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-# set(Boost_DEBUG ON)
+set(Boost_DEBUG ON)
 project(client VERSION 0.0.1)
 
 set(Boost_USE_STATIC_LIBS        ON)
