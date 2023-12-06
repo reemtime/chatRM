@@ -17,7 +17,7 @@ add_subdirectory(lib/libdb)
 
 if(Boost_FOUND)
   add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
-  target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_BINARY_DIR} include)
+  target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_BINARY_DIR} ${Boost_INCLUDE_DIRS} include)
   target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES} dbrequests)
   message("Boost version: " ${Boost_VERSION})
 endif()
